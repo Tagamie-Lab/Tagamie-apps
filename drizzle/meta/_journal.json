@@ -8,6 +8,13 @@
       "when": 1778816889438,
       "tag": "0000_sudden_meggan",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1778826282648,
+      "tag": "0001_daffy_mandrill",
+      "breakpoints": true
     }
   ]
 }

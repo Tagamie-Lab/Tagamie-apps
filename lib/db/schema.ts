@@ -142,6 +142,25 @@ export const invoiceTaxLines = pgTable(
   ],
 );
 
+export const taxNumberStatusEnum = pgEnum("tax_number_status", [
+  "active",
+  "withdrawn",
+  "unknown",
+]);
+
+export const taxNumberSourceEnum = pgEnum("tax_number_source", ["manual", "api"]);
+
+export const taxNumberCache = pgTable("tax_number_cache", {
+  taxNumber: text("tax_number").primaryKey(),
+  name: text("name"),
+  registeredAt: date("registered_at"),
+  status: taxNumberStatusEnum("status").notNull().default("unknown"),
+  verifiedAt: timestamp("verified_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  source: taxNumberSourceEnum("source").notNull().default("manual"),
+});
+
 export const invoiceEvents = pgTable(
   "invoice_events",
   {
