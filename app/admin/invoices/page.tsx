@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { and, eq, gte, lt } from "drizzle-orm";
+import { and, count, eq, gte, lt } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { jstMonthBounds } from "@/lib/aggregation/queries";
 import { lookupTaxNumber } from "@/lib/tax-number/verify";
 import { RunAggregationButton } from "./run-aggregation-button";
 import { IssuePdfButton } from "./issue-pdf-button";
+import { SeedMicropaymentsButton } from "./seed-micropayments-button";
 
 export const dynamic = "force-dynamic";
 
@@ -41,10 +42,8 @@ export default async function AdminInvoicesPage({
   const { year, month } = parsePeriod(sp);
   const bounds = jstMonthBounds(year, month);
 
-  const eventsInPeriod = await db
-    .select({
-      count: schema.settleEvents.id,
-    })
+  const [eventsInPeriod] = await db
+    .select({ value: count() })
     .from(schema.settleEvents)
     .where(
       and(
@@ -147,6 +146,9 @@ export default async function AdminInvoicesPage({
           表示
         </button>
         <RunAggregationButton year={year} month={month} />
+        {process.env.NODE_ENV !== "production" && (
+          <SeedMicropaymentsButton year={year} month={month} />
+        )}
       </form>
 
       <section className="mb-6 rounded border border-zinc-200 bg-zinc-50 p-4 text-sm dark:border-zinc-800 dark:bg-zinc-900">
@@ -155,7 +157,7 @@ export default async function AdminInvoicesPage({
         </div>
         <div>
           settle_events 件数 (JST {bounds.startUtc.toISOString().slice(0, 10)} ~):{" "}
-          <strong>{eventsInPeriod.length}</strong>
+          <strong>{eventsInPeriod?.value ?? 0}</strong>
         </div>
         <div>
           invoices 件数: <strong>{invoices.length}</strong>

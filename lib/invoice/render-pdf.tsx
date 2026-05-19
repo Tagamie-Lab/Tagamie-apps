@@ -51,6 +51,38 @@ function formatTaxRate(bps: number): string {
   return `${bps / 100}%`;
 }
 
+/**
+ * Format a single tax-rate row so that the displayed subtotal + tax === displayed total
+ * even after currency-unit truncation (1 ¥ drift problem when floor-dividing wei to yen).
+ *
+ * Strategy: keep displayed subtotal as floor(subtotal_minor), then derive displayed tax as
+ * (displayed_total - displayed_subtotal) — same accounting convention as W2's wei-level
+ * `tax = total - subtotal` rule (tax absorbs the rounding, buyer-favorable).
+ */
+function formatTaxLineForDisplay(
+  subtotalMinor: bigint,
+  taxMinor: bigint,
+  asset: Asset,
+): { subtotal: string; tax: string; total: string } {
+  if (asset === "JPYC") {
+    const ONE = 10n ** 18n;
+    const subtotalYen = subtotalMinor / ONE;
+    const totalYen = (subtotalMinor + taxMinor) / ONE;
+    const taxYen = totalYen - subtotalYen;
+    return {
+      subtotal: `¥${subtotalYen.toLocaleString()}`,
+      tax: `¥${taxYen.toLocaleString()}`,
+      total: `¥${totalYen.toLocaleString()}`,
+    };
+  }
+  // USDC: 6-decimal precision is shown in full, so wei-level identity holds in display too.
+  return {
+    subtotal: formatMoney(subtotalMinor, asset),
+    tax: formatMoney(taxMinor, asset),
+    total: formatMoney(subtotalMinor + taxMinor, asset),
+  };
+}
+
 // ---- styles -------------------------------------------------------------
 
 const styles = StyleSheet.create({
@@ -73,11 +105,12 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: 700,
     letterSpacing: 4,
+    lineHeight: 1.2,
+    marginBottom: 6,
   },
   invoiceNo: {
     fontSize: 10,
     color: "#444",
-    marginTop: 4,
   },
   issuedAt: {
     fontSize: 9,
@@ -181,9 +214,9 @@ const styles = StyleSheet.create({
     borderColor: "#eee",
     fontSize: 9,
   },
-  itemsCellDate: { width: 110 },
-  itemsCellAmount: { width: 70, textAlign: "right" },
-  itemsCellChain: { width: 50 },
+  itemsCellDate: { width: 110, paddingRight: 8 },
+  itemsCellAmount: { width: 80, paddingRight: 12, textAlign: "right" },
+  itemsCellChain: { width: 64, paddingRight: 8 },
   itemsCellTx: {
     flex: 1,
     fontSize: 8,
@@ -205,9 +238,9 @@ const styles = StyleSheet.create({
   disclaimer: {
     position: "absolute",
     fontSize: 7,
-    bottom: 36,
-    left: 40,
-    right: 40,
+    bottom: 34,
+    left: 32,
+    right: 32,
     textAlign: "center",
     color: "#666",
     lineHeight: 1.3,
@@ -225,9 +258,11 @@ const styles = StyleSheet.create({
 
 // 国税庁 適格請求書発行事業者公表システム Web-API 利用規約 第 6 条「情報の取得元の明示」義務。
 // PDF と verify 画面の両方に出典表記を必須化する。
+// CJK は単語境界が無いため fontkit の auto-hyphenation で「保証-/された」のように
+// 強制ハイフン挿入が起きる。文節で改行コードを明示的に入れて回避する。
 // Source: knowledge/nta.md §利用規約 第 6 条
 const NTA_DISCLAIMER =
-  "本書面の登録番号情報は、国税庁 適格請求書発行事業者公表システム Web-API 機能を利用して取得した情報をもとに作成しているが、国税庁によって保証されたものではない。";
+  "本書面の登録番号情報は、国税庁 適格請求書発行事業者公表システム Web-API 機能を利用して取得した情報をもとに作成しているが、\n国税庁によって保証されたものではない。";
 
 // ---- subcomponents ------------------------------------------------------
 
@@ -317,16 +352,21 @@ function TaxBreakdown({
           <Text style={styles.taxCellNum}>消費税額等</Text>
           <Text style={styles.taxCellNum}>合計（税込）</Text>
         </View>
-        {lines.map((l) => (
-          <View key={l.taxRateBps} style={styles.taxRow}>
-            <Text style={styles.taxCellRate}>{formatTaxRate(l.taxRateBps)}</Text>
-            <Text style={styles.taxCellNum}>{formatMoney(l.subtotalMinor, invoice.asset)}</Text>
-            <Text style={styles.taxCellNum}>{formatMoney(l.taxMinor, invoice.asset)}</Text>
-            <Text style={styles.taxCellNum}>
-              {formatMoney(l.subtotalMinor + l.taxMinor, invoice.asset)}
-            </Text>
-          </View>
-        ))}
+        {lines.map((l) => {
+          const display = formatTaxLineForDisplay(
+            l.subtotalMinor,
+            l.taxMinor,
+            invoice.asset,
+          );
+          return (
+            <View key={l.taxRateBps} style={styles.taxRow}>
+              <Text style={styles.taxCellRate}>{formatTaxRate(l.taxRateBps)}</Text>
+              <Text style={styles.taxCellNum}>{display.subtotal}</Text>
+              <Text style={styles.taxCellNum}>{display.tax}</Text>
+              <Text style={styles.taxCellNum}>{display.total}</Text>
+            </View>
+          );
+        })}
       </View>
     </View>
   );
@@ -370,8 +410,7 @@ function LineItems({
         ))}
       </View>
       <Text style={styles.footnote}>
-        全 {items.length} 件の on-chain settle event をこの請求書に紐付け済み。各 tx の
-        verifier は {explorerNames(items)}.
+        {`全 ${items.length} 件の on-chain settle event をこの請求書に紐付け済み。各 tx の検証は ${explorerNames(items)} で確認可能。`}
       </Text>
     </View>
   );

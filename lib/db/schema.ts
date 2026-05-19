@@ -5,6 +5,7 @@ import {
   text,
   integer,
   bigint,
+  numeric,
   boolean,
   timestamp,
   jsonb,
@@ -14,6 +15,15 @@ import {
   primaryKey,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+
+/**
+ * Token-amount columns hold minor units (wei for 18-decimal JPYC, micros for 6-decimal USDC).
+ * Postgres `bigint` (int8) caps at ~9.2e18, which overflows for any JPYC amount ≥ 10 JPYC
+ * (¥10 = 1e19 wei). Use `numeric(78, 0)` to handle the full 256-bit on-chain range while
+ * keeping the JS-side API as native `bigint` (Drizzle's "bigint" mode).
+ */
+const amountColumn = (name: string) =>
+  numeric(name, { precision: 78, scale: 0, mode: "bigint" });
 
 export const chainEnum = pgEnum("chain", ["polygon", "base", "ethereum"]);
 export const assetEnum = pgEnum("asset", ["JPYC", "USDC"]);
@@ -62,7 +72,7 @@ export const settleEvents = pgTable(
     buyerId: uuid("buyer_id")
       .notNull()
       .references(() => buyers.id),
-    amountMinor: bigint("amount_minor", { mode: "bigint" }).notNull(),
+    amountMinor: amountColumn("amount_minor").notNull(),
     asset: assetEnum("asset").notNull(),
     taxRateBps: integer("tax_rate_bps").notNull().default(1000),
     chain: chainEnum("chain").notNull(),
@@ -101,9 +111,9 @@ export const invoices = pgTable(
     smallAmountExemptionApplied: boolean("small_amount_exemption_applied")
       .notNull()
       .default(false),
-    totalMinor: bigint("total_minor", { mode: "bigint" }).notNull(),
-    subtotalMinor: bigint("subtotal_minor", { mode: "bigint" }).notNull(),
-    taxMinor: bigint("tax_minor", { mode: "bigint" }).notNull(),
+    totalMinor: amountColumn("total_minor").notNull(),
+    subtotalMinor: amountColumn("subtotal_minor").notNull(),
+    taxMinor: amountColumn("tax_minor").notNull(),
     asset: assetEnum("asset").notNull(),
     pdfUrl: text("pdf_url"),
     pdfHash: text("pdf_hash"),
@@ -131,8 +141,8 @@ export const invoiceTaxLines = pgTable(
       .notNull()
       .references(() => invoices.id, { onDelete: "cascade" }),
     taxRateBps: integer("tax_rate_bps").notNull(),
-    subtotalMinor: bigint("subtotal_minor", { mode: "bigint" }).notNull(),
-    taxMinor: bigint("tax_minor", { mode: "bigint" }).notNull(),
+    subtotalMinor: amountColumn("subtotal_minor").notNull(),
+    taxMinor: amountColumn("tax_minor").notNull(),
     eventCount: integer("event_count").notNull(),
   },
   (t) => [

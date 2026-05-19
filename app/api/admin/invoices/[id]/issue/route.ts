@@ -7,6 +7,7 @@ import {
   invoicePdfObjectPath,
   uploadInvoicePdf,
 } from "@/lib/storage/supabase";
+import { saveLocalDevPdf } from "@/lib/storage/local-dev";
 
 export const runtime = "nodejs";
 // PDF rendering with embedded ~9MB of CJK font files is well over the default Edge timeout.
@@ -30,57 +31,70 @@ interface RouteContext {
  */
 export async function POST(_req: Request, ctx: RouteContext) {
   const { id } = await ctx.params;
+  try {
+    const invoice = await loadCanonicalInvoice(id);
+    if (!invoice) {
+      return Response.json({ error: "invoice_not_found" }, { status: 404 });
+    }
+    if (invoice.status === "voided") {
+      return Response.json({ error: "invoice_voided" }, { status: 409 });
+    }
+    if (invoice.lineItems.length === 0) {
+      return Response.json({ error: "no_line_items" }, { status: 422 });
+    }
 
-  const invoice = await loadCanonicalInvoice(id);
-  if (!invoice) {
-    return Response.json({ error: "invoice_not_found" }, { status: 404 });
-  }
-  if (invoice.status === "voided") {
-    return Response.json({ error: "invoice_voided" }, { status: 409 });
-  }
-  if (invoice.lineItems.length === 0) {
-    return Response.json({ error: "no_line_items" }, { status: 422 });
-  }
+    const pdf = await renderInvoicePdf(invoice);
+    const pdfHash = createHash("sha256").update(pdf).digest("hex");
 
-  const pdf = await renderInvoicePdf(invoice);
-  const pdfHash = createHash("sha256").update(pdf).digest("hex");
+    // Local dev convenience: dump to ./tmp/pdfs/ before remote upload so the
+    // file is available for inspection even if Supabase Storage misbehaves.
+    const localPath = await saveLocalDevPdf(invoice.invoiceNumber, pdf);
 
-  // Need sellerId for the object path; load it from the invoices row.
-  const row = await db.query.invoices.findFirst({
-    where: eq(schema.invoices.id, id),
-    columns: { sellerId: true },
-  });
-  if (!row) {
-    return Response.json({ error: "invoice_not_found" }, { status: 404 });
-  }
+    // Need sellerId for the object path; load it from the invoices row.
+    const row = await db.query.invoices.findFirst({
+      where: eq(schema.invoices.id, id),
+      columns: { sellerId: true },
+    });
+    if (!row) {
+      return Response.json({ error: "invoice_not_found" }, { status: 404 });
+    }
 
-  const objectPath = invoicePdfObjectPath({
-    sellerId: row.sellerId,
-    periodMonth: invoice.periodMonth,
-    invoiceNumber: invoice.invoiceNumber,
-  });
-  await uploadInvoicePdf(objectPath, pdf);
-
-  const issuedAt = new Date();
-  await db
-    .update(schema.invoices)
-    .set({
-      pdfUrl: objectPath,
-      pdfHash,
-      status: "issued",
-      issuedAt,
-    })
-    .where(eq(schema.invoices.id, id));
-
-  return Response.json(
-    {
-      invoiceId: id,
+    const objectPath = invoicePdfObjectPath({
+      sellerId: row.sellerId,
+      periodMonth: invoice.periodMonth,
       invoiceNumber: invoice.invoiceNumber,
-      pdfHash,
-      pdfUrl: objectPath,
-      issuedAt: issuedAt.toISOString(),
-      byteLength: pdf.length,
-    },
-    { status: 200 },
-  );
+    });
+    await uploadInvoicePdf(objectPath, pdf);
+
+    const issuedAt = new Date();
+    await db
+      .update(schema.invoices)
+      .set({
+        pdfUrl: objectPath,
+        pdfHash,
+        status: "issued",
+        issuedAt,
+      })
+      .where(eq(schema.invoices.id, id));
+
+    return Response.json(
+      {
+        invoiceId: id,
+        invoiceNumber: invoice.invoiceNumber,
+        pdfHash,
+        pdfUrl: objectPath,
+        localPath,
+        issuedAt: issuedAt.toISOString(),
+        byteLength: pdf.length,
+      },
+      { status: 200 },
+    );
+  } catch (e) {
+    console.error("[issue PDF] failed", { invoiceId: id, error: e });
+    const message = e instanceof Error ? e.message : String(e);
+    return Response.json(
+      { error: "issue_failed", message },
+      { status: 500 },
+    );
+  }
 }

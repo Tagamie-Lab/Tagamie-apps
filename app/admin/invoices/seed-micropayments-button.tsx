@@ -4,11 +4,11 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 interface Props {
-  invoiceId: string;
-  alreadyIssued: boolean;
+  year: number;
+  month: number;
 }
 
-export function IssuePdfButton({ invoiceId, alreadyIssued }: Props) {
+export function SeedMicropaymentsButton({ year, month }: Props) {
   const [pending, setPending] = useState(false);
   const [, startTransition] = useTransition();
   const [msg, setMsg] = useState<string | null>(null);
@@ -18,19 +18,18 @@ export function IssuePdfButton({ invoiceId, alreadyIssued }: Props) {
     setPending(true);
     setMsg(null);
     try {
-      const res = await fetch(`/api/admin/invoices/${invoiceId}/issue`, {
+      const res = await fetch("/api/admin/seed-micropayments", {
         method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ year, month, count: 80 }),
       });
       const data = await res.json();
       if (!res.ok) {
         setMsg(`Error: ${data.error ?? res.status}`);
         return;
       }
-      const local = data.localPath
-        ? ` / local: ${(data.localPath as string).split("/").slice(-2).join("/")}`
-        : "";
       setMsg(
-        `hash ${(data.pdfHash as string).slice(0, 12)}… / ${data.byteLength} B${local}`,
+        `inserted: ${data.insertedNew}, skipped(dup): ${data.skippedDuplicate} → ${data.buyerName}`,
       );
       startTransition(() => router.refresh());
     } catch (e) {
@@ -46,9 +45,10 @@ export function IssuePdfButton({ invoiceId, alreadyIssued }: Props) {
         type="button"
         onClick={run}
         disabled={pending}
-        className="rounded border border-zinc-300 px-2 py-1 text-xs hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
+        className="rounded border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs text-amber-900 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200 dark:hover:bg-amber-900"
+        title="dev only: 80 件のマイクロペイメントを当月に seed"
       >
-        {pending ? "発行中…" : alreadyIssued ? "再発行" : "PDF 発行"}
+        {pending ? "seeding…" : "🧪 seed 80 micropayments (dev)"}
       </button>
       {msg && <span className="text-[10px] text-zinc-500">{msg}</span>}
     </div>
