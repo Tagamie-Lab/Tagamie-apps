@@ -15,6 +15,13 @@
       "when": 1778826282648,
       "tag": "0001_daffy_mandrill",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1779149918481,
+      "tag": "0002_chilly_mordo",
+      "breakpoints": true
     }
   ]
 }

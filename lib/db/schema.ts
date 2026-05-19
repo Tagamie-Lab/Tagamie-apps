@@ -106,6 +106,7 @@ export const invoices = pgTable(
     taxMinor: bigint("tax_minor", { mode: "bigint" }).notNull(),
     asset: assetEnum("asset").notNull(),
     pdfUrl: text("pdf_url"),
+    pdfHash: text("pdf_hash"),
     freeeDealId: text("freee_deal_id"),
     issuedAt: timestamp("issued_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })

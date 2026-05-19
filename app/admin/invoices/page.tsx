@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { and, desc, eq, gte, lt } from "drizzle-orm";
+import { and, eq, gte, lt } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { jstMonthBounds } from "@/lib/aggregation/queries";
 import { lookupTaxNumber } from "@/lib/tax-number/verify";
 import { RunAggregationButton } from "./run-aggregation-button";
+import { IssuePdfButton } from "./issue-pdf-button";
 
 export const dynamic = "force-dynamic";
 
@@ -161,6 +162,15 @@ export default async function AdminInvoicesPage({
         </div>
       </section>
 
+      {/* 国税庁 適格請求書発行事業者公表システム Web-API 利用規約 第 6 条:
+          情報の取得元の明示。verify バッジ表示画面にも掲示が必要。
+          See: knowledge/nta.md §利用規約 第 6 条 */}
+      <p className="mb-4 text-[11px] leading-snug text-zinc-500 dark:text-zinc-400">
+        本画面に表示される登録番号情報は、国税庁
+        適格請求書発行事業者公表システム Web-API
+        機能を利用して取得した情報をもとに作成しているが、国税庁によって保証されたものではない。
+      </p>
+
       {invoices.length === 0 ? (
         <div className="rounded border border-dashed border-zinc-300 p-8 text-center text-sm text-zinc-500 dark:border-zinc-700">
           この月の invoice はまだありません。「Run aggregation」ボタンで集計を実行できます。
@@ -177,6 +187,7 @@ export default async function AdminInvoicesPage({
                 <th className="px-3 py-2">Tax breakdown</th>
                 <th className="px-3 py-2">少額特例</th>
                 <th className="px-3 py-2">Status</th>
+                <th className="px-3 py-2">PDF</th>
               </tr>
             </thead>
             <tbody>
@@ -243,6 +254,32 @@ export default async function AdminInvoicesPage({
                         {inv.status}
                       </span>
                     </td>
+                    <td className="px-3 py-2">
+                      <div className="flex flex-col items-start gap-1">
+                        <IssuePdfButton
+                          invoiceId={inv.id}
+                          alreadyIssued={Boolean(inv.pdfUrl)}
+                        />
+                        {inv.pdfUrl && (
+                          <a
+                            href={`/api/admin/invoices/${inv.id}/pdf`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-xs text-blue-600 hover:underline dark:text-blue-400"
+                          >
+                            DL
+                          </a>
+                        )}
+                        {inv.pdfHash && (
+                          <span
+                            className="font-mono text-[10px] text-zinc-400"
+                            title={inv.pdfHash}
+                          >
+                            {inv.pdfHash.slice(0, 8)}…
+                          </span>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 );
               })}
@@ -250,6 +287,31 @@ export default async function AdminInvoicesPage({
           </table>
         </div>
       )}
+
+      {/* 申請書 2.4.1 / 2.7.1 「顧客の方も利用されるプログラムで登録番号以外の情報から検索することが
+          できる仕様となっている場合は、発行申請の承認ができません」への準拠ポリシー。
+          T 番号 verify の入力 UI を登録番号入力に限定し、法人名検索は本画面では一切行わない。
+          法人名→法人番号の逆引きが必要な場合は、別系統の法人番号 Web-API 経由で完結させる。
+          See: knowledge/nta.md §申請書記入時の不整合パターン (2.4.1 / 2.7.1) */}
+      <section className="mt-8 rounded border border-dashed border-zinc-300 p-4 text-xs leading-relaxed text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
+        <div className="mb-1 font-semibold text-zinc-700 dark:text-zinc-300">
+          T 番号入力 UI ポリシー
+        </div>
+        <ul className="ml-4 list-disc space-y-1">
+          <li>
+            本画面の T 番号 verify は、seller 登録時に保存された登録番号
+            (T + 13 桁) のみを照合対象とする。検索フォームは提供しない。
+          </li>
+          <li>
+            法人名 / 屋号 / 住所からの逆引き検索は本画面では行わない。法人名 →
+            法人番号の解決が必要な場合は、別途国税庁 法人番号 Web-API を利用する。
+          </li>
+          <li>
+            上記制約は、国税庁 適格請求書発行事業者公表システム Web-API
+            利用規約および申請書 2.7.1 注記への準拠を目的とする。
+          </li>
+        </ul>
+      </section>
     </div>
   );
 }
