@@ -67,3 +67,27 @@ export function findJpycByContract(
   }
   return null;
 }
+
+/**
+ * Map Alchemy `event.network` strings to our DB chain enum.
+ * Reference: https://docs.alchemy.com/reference/notify-api-quickstart
+ */
+const ALCHEMY_NETWORK_TO_DB: Record<string, DbChain> = {
+  ETH_MAINNET: "ethereum",
+  MATIC_MAINNET: "polygon",
+  POLYGON_MAINNET: "polygon",
+  MATIC_AMOY: "polygonAmoy",
+  POLYGON_AMOY: "polygonAmoy",
+  BASE_MAINNET: "base",
+};
+
+export function dbChainFromAlchemyNetwork(network: string): DbChain | null {
+  return ALCHEMY_NETWORK_TO_DB[network] ?? null;
+}
+
+export function jpycByDbChain(chain: DbChain): JpycChainConfig | null {
+  for (const cfg of Object.values(JPYC_BY_CHAIN_ID)) {
+    if (cfg.dbChain === chain) return cfg;
+  }
+  return null;
+}

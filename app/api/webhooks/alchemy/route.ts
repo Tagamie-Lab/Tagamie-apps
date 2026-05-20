@@ -4,7 +4,11 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db, schema } from "@/lib/db";
 import { inngest } from "@/lib/inngest/client";
-import { findJpycByContract } from "@/lib/chains/jpyc";
+import {
+  dbChainFromAlchemyNetwork,
+  findJpycByContract,
+  jpycByDbChain,
+} from "@/lib/chains/jpyc";
 
 export const runtime = "nodejs";
 
@@ -102,12 +106,35 @@ export async function POST(req: NextRequest) {
   let inserted = 0;
   let skipped = 0;
 
+  // Prefer Alchemy's `event.network` to pin the chain; the contract address
+  // alone can collide across testnets when the same env value is set in
+  // multiple chain configs.
+  const network = body.data.event.network ?? null;
+  const chainFromNetwork = network
+    ? dbChainFromAlchemyNetwork(network)
+    : null;
+
   for (const activity of body.data.event.activity) {
     if (activity.category !== "token") continue;
     const contractAddr = activity.rawContract?.address;
     if (!contractAddr) continue;
 
-    const chainCfg = findJpycByContract(contractAddr);
+    // Resolve the JPYC config: prefer (network → expected contract) over
+    // (contract → first match) so address collisions across testnets don't
+    // misattribute the chain.
+    let chainCfg = null;
+    if (chainFromNetwork) {
+      const expected = jpycByDbChain(chainFromNetwork);
+      if (
+        expected?.jpycAddress &&
+        expected.jpycAddress.toLowerCase() === contractAddr.toLowerCase()
+      ) {
+        chainCfg = expected;
+      }
+    }
+    if (!chainCfg) {
+      chainCfg = findJpycByContract(contractAddr);
+    }
     if (!chainCfg) {
       // Not a JPYC contract we recognise — ignore.
       skipped++;
