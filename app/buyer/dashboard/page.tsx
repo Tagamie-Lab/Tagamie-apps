@@ -160,7 +160,7 @@ export default async function BuyerDashboardPage() {
                     </span>
                     {inv.pdfUrl && (
                       <Link
-                        href={`/api/admin/invoices/${inv.id}/pdf`}
+                        href={`/api/buyer/invoices/${inv.id}/pdf`}
                         className="text-sm text-blue-600 underline hover:text-blue-800 dark:text-blue-400"
                       >
                         PDF DL

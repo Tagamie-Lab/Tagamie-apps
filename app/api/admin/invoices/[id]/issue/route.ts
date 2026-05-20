@@ -1,12 +1,20 @@
 import { createHash } from "node:crypto";
 import { eq } from "drizzle-orm";
+import { getAddress } from "viem";
 import { db, schema } from "@/lib/db";
 import { loadCanonicalInvoice } from "@/lib/invoice/load";
 import { renderInvoicePdf } from "@/lib/invoice/render-pdf";
 import {
+  pdfHashHex,
+  signInvoiceTypedData,
+  invoiceTypedDataJson,
+  type InvoiceTypedDataMessage,
+} from "@/lib/invoice/eip712";
+import {
   invoicePdfObjectPath,
   uploadInvoicePdf,
 } from "@/lib/storage/supabase";
+import { pinFile, pinJson } from "@/lib/storage/pinata";
 import { saveLocalDevPdf } from "@/lib/storage/local-dev";
 
 export const runtime = "nodejs";
@@ -66,7 +74,86 @@ export async function POST(_req: Request, ctx: RouteContext) {
     });
     await uploadInvoicePdf(objectPath, pdf);
 
+    // --- W-2: EIP-712 signature + IPFS pin -----------------------------------
+    // Three-layer canonical (tagamie-platform-spec §3.4):
+    //   1. EIP-712 signed metadata (cryptographic 真実性, this block)
+    //   2. NFT mint (W-3, references ipfs:// of metadata.json)
+    //   3. PDF (法定 6 要件, pinned to IPFS for NFT-linked download)
+    //
+    // Network failures here are tolerated (issuance still succeeds with the
+    // Supabase upload above); IPFS/EIP-712 fields are filled best-effort.
     const issuedAt = new Date();
+    let ipfsPdfCid: string | null = null;
+    let ipfsMetadataCid: string | null = null;
+    let eip712Signature: `0x${string}` | null = null;
+    let eip712MessageHash: `0x${string}` | null = null;
+
+    try {
+      ipfsPdfCid = (
+        await pinFile(pdf, {
+          name: `${invoice.invoiceNumber}.pdf`,
+          contentType: "application/pdf",
+          keyvalues: {
+            invoiceId: id,
+            invoiceNumber: invoice.invoiceNumber,
+            periodMonth: invoice.periodMonth,
+            sellerTaxNumber: invoice.seller.taxNumber,
+          },
+        })
+      ).cid;
+    } catch (e) {
+      console.warn("[issue PDF] IPFS PDF pin failed (continuing)", e);
+    }
+
+    try {
+      const buyerAddr = getAddress(invoice.buyer.walletAddress as `0x${string}`);
+      const sellerAddr = getAddress(
+        (await db.query.sellers.findFirst({
+          where: eq(schema.sellers.id, row.sellerId),
+          columns: { payToAddress: true },
+        }))!.payToAddress as `0x${string}`,
+      );
+      const eip712Message: InvoiceTypedDataMessage = {
+        invoiceNumber: invoice.invoiceNumber,
+        periodMonth: invoice.periodMonth,
+        sellerLegalName: invoice.seller.legalName,
+        sellerTaxNumber: invoice.seller.taxNumber,
+        sellerAddress: sellerAddr,
+        buyerAddress: buyerAddr,
+        asset: invoice.asset,
+        totalMinor: invoice.totalMinor,
+        subtotalMinor: invoice.subtotalMinor,
+        taxMinor: invoice.taxMinor,
+        smallAmountExemptionApplied: invoice.smallAmountExemptionApplied,
+        pdfHash: pdfHashHex(pdfHash),
+        issuedAt: BigInt(Math.floor(issuedAt.getTime() / 1000)),
+      };
+      const { signature, messageHash } =
+        await signInvoiceTypedData(eip712Message);
+      eip712Signature = signature;
+      eip712MessageHash = messageHash;
+
+      try {
+        const metadataJson = invoiceTypedDataJson(eip712Message, signature);
+        if (ipfsPdfCid) {
+          (metadataJson as Record<string, unknown>).pdfIpfs = `ipfs://${ipfsPdfCid}`;
+        }
+        ipfsMetadataCid = (
+          await pinJson(metadataJson, {
+            name: `${invoice.invoiceNumber}.metadata.json`,
+            keyvalues: {
+              invoiceId: id,
+              invoiceNumber: invoice.invoiceNumber,
+            },
+          })
+        ).cid;
+      } catch (e) {
+        console.warn("[issue PDF] IPFS metadata pin failed (continuing)", e);
+      }
+    } catch (e) {
+      console.warn("[issue PDF] EIP-712 signing failed (continuing)", e);
+    }
+
     await db
       .update(schema.invoices)
       .set({
@@ -74,6 +161,10 @@ export async function POST(_req: Request, ctx: RouteContext) {
         pdfHash,
         status: "issued",
         issuedAt,
+        ipfsPdfCid,
+        ipfsMetadataCid,
+        eip712Signature,
+        eip712MessageHash,
       })
       .where(eq(schema.invoices.id, id));
 
@@ -86,6 +177,10 @@ export async function POST(_req: Request, ctx: RouteContext) {
         localPath,
         issuedAt: issuedAt.toISOString(),
         byteLength: pdf.length,
+        ipfsPdfCid,
+        ipfsMetadataCid,
+        eip712Signature,
+        eip712MessageHash,
       },
       { status: 200 },
     );
