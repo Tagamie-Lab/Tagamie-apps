@@ -174,8 +174,8 @@ export async function aggregatePeriod(
 export function previousJstMonth(now = new Date()): { year: number; month1based: number } {
   // Convert "now" to JST calendar Y/M
   const jstNow = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-  let y = jstNow.getUTCFullYear();
-  let m = jstNow.getUTCMonth(); // 0..11, this is current month0; previous is m-1+1
+  const y = jstNow.getUTCFullYear();
+  const m = jstNow.getUTCMonth(); // 0..11, this is current month0; previous is m-1+1
   if (m === 0) {
     return { year: y - 1, month1based: 12 };
   }

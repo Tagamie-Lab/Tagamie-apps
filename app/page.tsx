@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 export default function Home() {
   return (
@@ -17,19 +17,39 @@ export default function Home() {
         <p className="max-w-xl text-lg leading-relaxed text-zinc-600 dark:text-zinc-400">
           seller も buyer も、税務署も。同じ取引を、同じ精度で見る。
           <br />
-          x402 settle → 月次合算 → 適格請求書 → freee 連携、全自動。
+          JPYC 取引 → 月次合算 → 適格請求書 NFT → wallet 直接配布、全自動。
         </p>
 
         <div className="flex flex-wrap gap-3 justify-center pt-4">
-          <Button size="lg" disabled>
-            β を試す（準備中）
-          </Button>
-          <Button size="lg" variant="outline" disabled>
-            動くデモを見る
-          </Button>
+          <Link
+            href="/seller/register"
+            className="rounded-md bg-black px-6 py-3 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-white dark:text-black dark:hover:bg-zinc-200"
+          >
+            Seller として登録
+          </Link>
+          <Link
+            href="/buyer/register"
+            className="rounded-md border border-zinc-300 bg-white px-6 py-3 text-sm font-medium text-black hover:bg-zinc-100 dark:border-zinc-700 dark:bg-black dark:text-white dark:hover:bg-zinc-900"
+          >
+            Buyer として登録
+          </Link>
         </div>
 
-        <p className="text-xs text-zinc-400 dark:text-zinc-600 pt-12">
+        <div className="flex flex-wrap gap-3 justify-center text-xs text-zinc-500 dark:text-zinc-400">
+          <Link href="/seller/dashboard" className="hover:underline">
+            Seller Dashboard →
+          </Link>
+          <span>·</span>
+          <Link href="/buyer/dashboard" className="hover:underline">
+            Buyer Dashboard →
+          </Link>
+        </div>
+
+        <p className="text-xs text-zinc-400 dark:text-zinc-600 pt-8">
+          岡部典孝氏 特許第 7542890 号 (JPYC 株式会社) 準拠 · 利用許諾相談中 · 試験実装段階
+        </p>
+
+        <p className="text-xs text-zinc-400 dark:text-zinc-600">
           近江商人「三方良し」のデジタル版。
         </p>
       </main>

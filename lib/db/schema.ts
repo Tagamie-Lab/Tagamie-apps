@@ -25,7 +25,14 @@ import { sql } from "drizzle-orm";
 const amountColumn = (name: string) =>
   numeric(name, { precision: 78, scale: 0, mode: "bigint" });
 
-export const chainEnum = pgEnum("chain", ["polygon", "base", "ethereum"]);
+export const chainEnum = pgEnum("chain", [
+  "polygon",
+  "base",
+  "ethereum",
+  "kaia",
+  "polygonAmoy",
+  "kaiaKairos",
+]);
 export const assetEnum = pgEnum("asset", ["JPYC", "USDC"]);
 export const invoiceStatusEnum = pgEnum("invoice_status", [
   "draft",
@@ -39,6 +46,10 @@ export const sellers = pgTable("sellers", {
   legalName: text("legal_name").notNull(),
   taxNumber: text("tax_number").notNull().unique(),
   payToAddress: text("pay_to_address").notNull().unique(),
+  email: text("email"),
+  transactionAgentName: text("transaction_agent_name"),
+  businessAddress: text("business_address"),
+  industry: text("industry"),
   bankAccount: jsonb("bank_account"),
   freeeCompanyId: text("freee_company_id"),
   freeeAccessToken: text("freee_access_token"),
@@ -52,6 +63,7 @@ export const buyers = pgTable("buyers", {
   id: uuid("id").primaryKey().defaultRandom(),
   walletAddress: text("wallet_address").notNull().unique(),
   legalName: text("legal_name"),
+  businessName: text("business_name"),
   taxNumber: text("tax_number"),
   smallAmountExemptionEligible: boolean("small_amount_exemption_eligible")
     .notNull()
@@ -60,6 +72,79 @@ export const buyers = pgTable("buyers", {
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
+});
+
+export const walletOwnerTypeEnum = pgEnum("wallet_owner_type", [
+  "seller",
+  "buyer",
+]);
+
+/**
+ * Multi-wallet registry. Each seller/buyer can have multiple wallets across chains.
+ * Wallet ownership is verified via SIWE (EIP-4361) at registration time.
+ * The seller.payToAddress / buyer.walletAddress columns remain as the
+ * "primary" address for backward compatibility; this table is the authoritative
+ * source for multi-wallet lookups by Phase 0-A indexer.
+ */
+export const wallets = pgTable(
+  "wallets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    address: text("address").notNull(),
+    ownerType: walletOwnerTypeEnum("owner_type").notNull(),
+    sellerId: uuid("seller_id").references(() => sellers.id, {
+      onDelete: "cascade",
+    }),
+    buyerId: uuid("buyer_id").references(() => buyers.id, {
+      onDelete: "cascade",
+    }),
+    label: text("label"),
+    verifiedAt: timestamp("verified_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("wallets_address_owner_type_uq").on(t.address, t.ownerType),
+    index("wallets_seller_idx").on(t.sellerId),
+    index("wallets_buyer_idx").on(t.buyerId),
+  ],
+);
+
+/**
+ * SIWE nonces for CSRF protection. Each nonce is single-use and short-lived.
+ * Nonces are deleted on successful verify or after expiresAt elapses (cleanup job TBD).
+ */
+export const authNonces = pgTable(
+  "auth_nonces",
+  {
+    nonce: text("nonce").primaryKey(),
+    address: text("address"),
+    issuedAt: timestamp("issued_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+  },
+  (t) => [index("auth_nonces_expires_idx").on(t.expiresAt)],
+);
+
+/**
+ * Terms of service acceptance log (個情法対応、 jpyc-privacy 先例に整合).
+ * Stored per wallet address since users authenticate by wallet.
+ */
+export const termsAcceptance = pgTable("terms_acceptance", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  walletAddress: text("wallet_address").notNull(),
+  termsVersion: text("terms_version").notNull(),
+  privacyVersion: text("privacy_version").notNull(),
+  acceptedAt: timestamp("accepted_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
 });
 
 export const settleEvents = pgTable(

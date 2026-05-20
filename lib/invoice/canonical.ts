@@ -3,7 +3,13 @@
 //
 // Reference: knowledge/tagamie-w3.md §タスク 3.1 補足 (CanonicalInvoice 設計)
 
-export type Chain = "polygon" | "base" | "ethereum";
+export type Chain =
+  | "polygon"
+  | "base"
+  | "ethereum"
+  | "kaia"
+  | "polygonAmoy"
+  | "kaiaKairos";
 export type Asset = "JPYC" | "USDC";
 
 export interface CanonicalInvoiceSeller {
@@ -58,6 +64,9 @@ const EXPLORERS: Record<Chain, string> = {
   polygon: "https://polygonscan.com/tx/",
   base: "https://basescan.org/tx/",
   ethereum: "https://etherscan.io/tx/",
+  kaia: "https://kaiascan.io/tx/",
+  polygonAmoy: "https://amoy.polygonscan.com/tx/",
+  kaiaKairos: "https://kairos.kaiascan.io/tx/",
 };
 
 export function txExplorerUrl(chain: Chain, txHash: string): string {
@@ -72,5 +81,11 @@ export function explorerName(chain: Chain): string {
       return "Basescan";
     case "ethereum":
       return "Etherscan";
+    case "kaia":
+      return "Kaiascan";
+    case "polygonAmoy":
+      return "Amoy Polygonscan";
+    case "kaiaKairos":
+      return "Kairos Kaiascan";
   }
 }
