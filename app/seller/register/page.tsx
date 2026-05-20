@@ -30,8 +30,7 @@ export default function SellerRegisterPage() {
       </div>
 
       <p className="mt-6 text-xs text-zinc-500 dark:text-zinc-400">
-        Tagamie は岡部典孝氏 特許第 7542890 号 (JPYC 株式会社) に準拠して実装されています
-        (利用許諾相談中、 試験実装段階)。
+        Phase 0 試験実装段階。
       </p>
     </main>
   );

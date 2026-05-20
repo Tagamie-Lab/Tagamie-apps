@@ -120,7 +120,7 @@ export default async function BuyerDashboardPage() {
       <section className="mt-8">
         <h2 className="text-lg font-medium">受領した適格請求書</h2>
         <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-          月初 cron で発行された invoice を表示しています。 NFT 関連 UI は W-2 / W-3 で追加予定。
+          月初 cron で発行された適格請求書 PDF を表示しています。
         </p>
 
         {invoices.length === 0 ? (
@@ -180,8 +180,7 @@ export default async function BuyerDashboardPage() {
       </section>
 
       <p className="mt-8 text-xs text-zinc-500 dark:text-zinc-400">
-        Tagamie は岡部典孝氏 特許第 7542890 号 (JPYC 株式会社) に準拠して実装されています
-        (利用許諾相談中、 試験実装段階)。
+        Phase 0 試験実装段階。
       </p>
     </main>
   );

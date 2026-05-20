@@ -17,7 +17,7 @@ export default function Home() {
         <p className="max-w-xl text-lg leading-relaxed text-zinc-600 dark:text-zinc-400">
           seller も buyer も、税務署も。同じ取引を、同じ精度で見る。
           <br />
-          JPYC 取引 → 月次合算 → 適格請求書 NFT → wallet 直接配布、全自動。
+          JPYC の on-chain 取引を自動集計して、毎月 1 日に適格請求書 PDF を自動発行。
         </p>
 
         <div className="flex flex-wrap gap-3 justify-center pt-4">
@@ -46,7 +46,7 @@ export default function Home() {
         </div>
 
         <p className="text-xs text-zinc-400 dark:text-zinc-600 pt-8">
-          岡部典孝氏 特許第 7542890 号 (JPYC 株式会社) 準拠 · 利用許諾相談中 · 試験実装段階
+          Phase 0 試験実装段階 · facilitator agnostic (yen402 / CDP / MetaMask MCP)
         </p>
 
         <p className="text-xs text-zinc-400 dark:text-zinc-600">

@@ -19,7 +19,7 @@ export default function BuyerRegisterPage() {
         買い手 (Buyer) 登録
       </h1>
       <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-        JPYC で B2B 取引を行う買い手として登録します。 適格請求書を NFT + PDF で wallet に直接受領できます。
+        JPYC で B2B 取引を行う買い手として登録します。 月初 cron で発行された適格請求書 PDF を dashboard でいつでも受領できます。
       </p>
 
       <div className="mt-8 rounded-lg border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
@@ -29,8 +29,7 @@ export default function BuyerRegisterPage() {
       </div>
 
       <p className="mt-6 text-xs text-zinc-500 dark:text-zinc-400">
-        Tagamie は岡部典孝氏 特許第 7542890 号 (JPYC 株式会社) に準拠して実装されています
-        (利用許諾相談中、 試験実装段階)。
+        Phase 0 試験実装段階。
       </p>
     </main>
   );
