@@ -1,6 +1,17 @@
 import { and, asc, eq, gte, lt, sql } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 
+/**
+ * Union of the top-level `db` (PostgresJsDatabase) and the `tx` argument passed
+ * to a `db.transaction(...)` callback (PgTransaction). PgTransaction lacks
+ * `$client` so `typeof db` alone won't accept it — we widen via
+ * `Parameters<...>` so `allocateInvoiceNumber` can be called either standalone
+ * or inside an aggregation transaction without losing type-safety.
+ */
+type DbOrTx =
+  | typeof db
+  | Parameters<Parameters<typeof db.transaction>[0]>[0];
+
 export interface PeriodBoundsJST {
   /** Start of month in UTC (representing 00:00 JST of day 1) */
   startUtc: Date;
@@ -126,12 +137,20 @@ export async function aggregateBucket(
   return Array.from(groups.values()).sort((a, b) => a.taxRateBps - b.taxRateBps);
 }
 
-/** Atomically allocate the next invoice number for a seller. */
+/**
+ * Atomically allocate the next invoice number for a seller. Must run inside the
+ * caller's transaction so that, if the surrounding invoice INSERT fails (e.g.
+ * unique-constraint conflict on (seller, buyer, period)), the counter
+ * increment rolls back too — preventing "phantom gap" 採番 numbers that 監査
+ * tends to question. Combined with `pg_advisory_xact_lock` on (seller,
+ * period) in [[aggregate.ts]], this serialises same-bucket aggregation.
+ */
 export async function allocateInvoiceNumber(
+  tx: DbOrTx,
   sellerId: string,
   periodMonth: string,
 ): Promise<string> {
-  const [row] = await db
+  const [row] = await tx
     .update(schema.sellers)
     .set({ invoiceCounter: sql`${schema.sellers.invoiceCounter} + 1` })
     .where(eq(schema.sellers.id, sellerId))

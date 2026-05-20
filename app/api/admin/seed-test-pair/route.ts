@@ -54,7 +54,6 @@ export async function POST(req: Request) {
   const year = args.year ?? 2026;
   const month = args.month ?? 5;
   const chain = args.chain ?? "polygonAmoy";
-  const taxRateBps = args.taxRateBps ?? 1000;
 
   const seller = await db.query.sellers.findFirst({
     where: eq(schema.sellers.payToAddress, sellerAddress),
@@ -69,6 +68,8 @@ export async function POST(req: Request) {
       { status: 404 },
     );
   }
+
+  const taxRateBps = args.taxRateBps ?? seller.defaultTaxRateBps;
 
   const buyer = await db.query.buyers.findFirst({
     where: eq(schema.buyers.walletAddress, buyerAddress),

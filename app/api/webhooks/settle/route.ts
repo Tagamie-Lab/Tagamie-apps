@@ -1,8 +1,11 @@
+import { timingSafeEqual } from "node:crypto";
 import { NextRequest } from "next/server";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db, schema } from "@/lib/db";
 import { inngest } from "@/lib/inngest/client";
+
+export const runtime = "nodejs";
 
 const payloadSchema = z.object({
   txHash: z.string().regex(/^0x[a-fA-F0-9]{64}$/),
@@ -21,10 +24,23 @@ function json(status: number, body: unknown) {
   return Response.json(body, { status });
 }
 
+/**
+ * Constant-time secret comparison (review item #6). Matches the pattern used
+ * by the Alchemy webhook so both ingest paths leak no timing information when
+ * an attacker probes the shared-secret header.
+ */
+function constantTimeEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (ab.length !== bb.length) return false;
+  return timingSafeEqual(ab, bb);
+}
+
 export async function POST(req: NextRequest) {
   const expected = process.env.TAGAMIE_WEBHOOK_SECRET;
   if (!expected) return json(500, { error: "webhook_secret_not_configured" });
-  if (req.headers.get("x-webhook-secret") !== expected) {
+  const provided = req.headers.get("x-webhook-secret") ?? "";
+  if (!constantTimeEqual(provided, expected)) {
     return json(401, { error: "unauthorized" });
   }
 
@@ -52,7 +68,7 @@ export async function POST(req: NextRequest) {
       buyerId: buyer.id,
       amountMinor: BigInt(parsed.amountMinor),
       asset: parsed.asset,
-      taxRateBps: parsed.taxRateBps ?? 1000,
+      taxRateBps: parsed.taxRateBps ?? seller.defaultTaxRateBps,
       chain: parsed.chain,
       txHash: parsed.txHash.toLowerCase(),
       blockNumber: parsed.blockNumber ? BigInt(parsed.blockNumber) : null,

@@ -14,7 +14,6 @@ import {
   index,
   primaryKey,
 } from "drizzle-orm/pg-core";
-import { sql } from "drizzle-orm";
 
 /**
  * Token-amount columns hold minor units (wei for 18-decimal JPYC, micros for 6-decimal USDC).
@@ -54,6 +53,10 @@ export const sellers = pgTable("sellers", {
   freeeCompanyId: text("freee_company_id"),
   freeeAccessToken: text("freee_access_token"),
   invoiceCounter: integer("invoice_counter").notNull().default(0),
+  // Default tax rate (bps) used when ingesting transfers without an explicit
+  // rate. 1000 = 10%. Sellers handling 軽減税率 (8%) can set 800 per their
+  // operation. Per-event rate still wins via the webhook payload when given.
+  defaultTaxRateBps: integer("default_tax_rate_bps").notNull().default(1000),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -159,10 +162,17 @@ export const settleEvents = pgTable(
       .references(() => buyers.id),
     amountMinor: amountColumn("amount_minor").notNull(),
     asset: assetEnum("asset").notNull(),
+    // Safety net only. Every ingest path now passes an explicit rate sourced
+    // from `sellers.defaultTaxRateBps` (or webhook override); this column
+    // default just catches a future code path that forgets to.
     taxRateBps: integer("tax_rate_bps").notNull().default(1000),
     chain: chainEnum("chain").notNull(),
     txHash: text("tx_hash").notNull(),
     blockNumber: bigint("block_number", { mode: "bigint" }),
+    // Block timestamp resolved via RPC at ingest time. Authoritative source
+    // for `occurredAt` (which is set equal when this resolves). Nullable so
+    // legacy rows and RPC-failure rows can be backfilled separately.
+    blockTimestamp: timestamp("block_timestamp", { withTimezone: true }),
     rawPayload: jsonb("raw_payload").notNull(),
     resource: text("resource"),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),

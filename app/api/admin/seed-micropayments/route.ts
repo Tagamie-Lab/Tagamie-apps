@@ -94,7 +94,7 @@ export async function POST(req: Request) {
       buyerId: buyer.id,
       amountMinor,
       asset: "JPYC",
-      taxRateBps: 1000, // 10%
+      taxRateBps: seller.defaultTaxRateBps,
       chain: "polygon",
       txHash,
       blockNumber: 50_000_000n + BigInt(i),

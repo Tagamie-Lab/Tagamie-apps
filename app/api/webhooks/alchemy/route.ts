@@ -9,6 +9,7 @@ import {
   findJpycByContract,
   jpycByDbChain,
 } from "@/lib/chains/jpyc";
+import { fetchBlockTimestamp } from "@/lib/chains/block-time";
 
 export const runtime = "nodejs";
 
@@ -114,6 +115,25 @@ export async function POST(req: NextRequest) {
     ? dbChainFromAlchemyNetwork(network)
     : null;
 
+  // Cache block→timestamp lookups within this webhook batch. Multiple transfers
+  // can land in the same block; resolving once per block keeps RPC pressure low.
+  const blockTimestampCache = new Map<string, Date | null>();
+  async function resolveBlockTimestamp(
+    chain: string,
+    blockNumber: bigint,
+  ): Promise<Date | null> {
+    const key = `${chain}:${blockNumber.toString()}`;
+    if (blockTimestampCache.has(key)) {
+      return blockTimestampCache.get(key) ?? null;
+    }
+    const ts = await fetchBlockTimestamp(
+      chain as Parameters<typeof fetchBlockTimestamp>[0],
+      blockNumber,
+    );
+    blockTimestampCache.set(key, ts);
+    return ts;
+  }
+
   for (const activity of body.data.event.activity) {
     if (activity.category !== "token") continue;
     const contractAddr = activity.rawContract?.address;
@@ -185,6 +205,23 @@ export async function POST(req: NextRequest) {
         ? hexToBigInt(activity.blockNum)
         : null;
 
+    // Resolve block timestamp via RPC so `occurredAt` reflects on-chain time,
+    // not webhook delivery time. A late webhook for a 月末23:59 tx would
+    // otherwise bucket into the *next* month's invoice (review item #1).
+    const blockTimestamp =
+      blockNumber !== null
+        ? await resolveBlockTimestamp(chainCfg.dbChain, blockNumber)
+        : null;
+    if (blockTimestamp === null) {
+      console.warn(
+        `[alchemy webhook] missing block timestamp tx=${txHash} chain=${chainCfg.dbChain} block=${blockNumber?.toString() ?? "?"} — falling back to received-time; backfill required`,
+      );
+    }
+    // Fall back to `now()` only when RPC could not resolve. The
+    // `block_timestamp` column stays null in that case and can be backfilled
+    // by a maintenance job before month-close.
+    const occurredAt = blockTimestamp ?? new Date();
+
     try {
       const result = await db
         .insert(schema.settleEvents)
@@ -193,13 +230,14 @@ export async function POST(req: NextRequest) {
           buyerId: buyer.id,
           amountMinor,
           asset: "JPYC",
-          taxRateBps: 1000, // default 10%, refinable via Phase 1 seller settings
+          taxRateBps: seller.defaultTaxRateBps,
           chain: chainCfg.dbChain,
           txHash,
           blockNumber,
+          blockTimestamp,
           rawPayload: activity as unknown as Record<string, unknown>,
           resource: null,
-          occurredAt: new Date(),
+          occurredAt,
         })
         .onConflictDoNothing({
           target: [schema.settleEvents.chain, schema.settleEvents.txHash],

@@ -79,6 +79,17 @@ async function aggregateOneBucket(
 
   // Wrap insert + tax_lines + event links in a transaction so failure leaves no partials.
   const result = await db.transaction(async (tx) => {
+    // Acquire a per-(seller, period) advisory xact lock so that two concurrent
+    // aggregations of the same bucket serialise here. Without this, both
+    // workers can read `existing = null`, both increment the seller counter,
+    // and one INSERT fails on the unique constraint — leaving the counter
+    // bumped with a "phantom gap" 採番 number (review item #4).
+    // The lock auto-releases on COMMIT/ROLLBACK; key is FNV-style hash of
+    // (sellerId || periodMonth) via Postgres' built-in `hashtext`.
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtext(${sellerId + ":" + bounds.periodMonth}))`,
+    );
+
     // Try to claim this period; if already claimed, skip.
     const existing = await tx.query.invoices.findFirst({
       where: and(
@@ -95,7 +106,7 @@ async function aggregateOneBucket(
       };
     }
 
-    const invoiceNumber = await allocateInvoiceNumber(sellerId, bounds.periodMonth);
+    const invoiceNumber = await allocateInvoiceNumber(tx, sellerId, bounds.periodMonth);
 
     const [inv] = await tx
       .insert(schema.invoices)

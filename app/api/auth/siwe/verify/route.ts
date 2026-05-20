@@ -25,9 +25,17 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Bind the SIWE verifier to the server's expected host so a message minted
+  // for a different origin cannot be accepted here (review item #2).
+  // Vercel/Edge forwards the original host on `host`; behind a reverse proxy
+  // that rewrites it, set TAGAMIE_PUBLIC_HOST to the canonical host.
+  const expectedDomain =
+    process.env.TAGAMIE_PUBLIC_HOST ?? req.headers.get("host") ?? undefined;
+
   const result = await verifySiwe(
     parsed.data.message,
     parsed.data.signature as `0x${string}`,
+    expectedDomain,
   );
   if (!result.ok) {
     return Response.json({ error: result.error }, { status: 401 });
