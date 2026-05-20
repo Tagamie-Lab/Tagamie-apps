@@ -43,6 +43,13 @@
       "when": 1779261328304,
       "tag": "0005_windy_skullbuster",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1779267346095,
+      "tag": "0006_rare_freak",
+      "breakpoints": true
     }
   ]
 }
