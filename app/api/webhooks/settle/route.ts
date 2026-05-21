@@ -7,6 +7,44 @@ import { inngest } from "@/lib/inngest/client";
 
 export const runtime = "nodejs";
 
+/**
+ * Cross-Layer Context v1 (knowledge/cross-layer-context.md §3).
+ * Validated loosely — facilitators send it opaquely, only `version` is
+ * required to match. Extra fields are preserved into rawPayload so the
+ * invoice load path can pull description / service name later
+ * (lib/invoice/load.ts:extractTransactionDescription).
+ */
+const crossLayerContextSchema = z
+  .object({
+    version: z.literal("1.0"),
+    intent: z.string().optional(),
+    service: z
+      .object({
+        name: z.string(),
+        category: z.string().optional(),
+        endpoint: z.string().optional(),
+        counterparty_wallet: z.string(),
+      })
+      .passthrough(),
+    description: z.string().optional(),
+    invoice_hints: z
+      .object({
+        tax_category: z.enum(["standard_10", "reduced_8", "exempt"]).optional(),
+        receipt_id: z.string().optional(),
+      })
+      .passthrough()
+      .optional(),
+    source: z
+      .object({
+        discovery_layer: z.enum(["paylog", "manual", "other"]),
+        discovered_at: z.string().optional(),
+        trust_score_at_discovery: z.number().optional(),
+      })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough();
+
 const payloadSchema = z.object({
   txHash: z.string().regex(/^0x[a-fA-F0-9]{64}$/),
   chain: z.enum(["polygon", "base", "ethereum"]),
@@ -18,6 +56,7 @@ const payloadSchema = z.object({
   blockNumber: z.string().regex(/^\d+$/).optional(),
   resource: z.string().optional(),
   occurredAt: z.string().datetime(),
+  context: crossLayerContextSchema.optional(),
 });
 
 function json(status: number, body: unknown) {

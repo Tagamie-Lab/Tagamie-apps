@@ -82,8 +82,12 @@ export default async function BuyerDashboardPage() {
   for (const w of allBuyerWallets) addresses.add(w.address);
 
   // Fetch invoices for this buyer (all periods, latest 50)
+  // Draft (= seller 未確定) は buyer 画面に出さない (確定ゲート semantics、 v5 #6)
   const invoices = await db.query.invoices.findMany({
-    where: eq(schema.invoices.buyerId, buyer.id),
+    where: and(
+      eq(schema.invoices.buyerId, buyer.id),
+      eq(schema.invoices.status, "issued"),
+    ),
     orderBy: (t) => [desc(t.periodMonth), desc(t.createdAt)],
     limit: 50,
   });
@@ -120,13 +124,14 @@ export default async function BuyerDashboardPage() {
       <section className="mt-8">
         <h2 className="text-lg font-medium">受領した適格請求書</h2>
         <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-          月初 cron で発行された適格請求書 PDF を表示しています。
+          seller が確定・交付した適格請求書 PDF を表示しています
+          (draft 段階の未確定 invoice は表示されません)。
         </p>
 
         {invoices.length === 0 ? (
           <p className="mt-6 rounded-md border border-dashed border-zinc-300 p-6 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
             まだ受領 invoice はありません。
-            JPYC で取引が発生し、 翌月初の cron が走ると表示されます。
+            JPYC で取引が発生し、 翌月初に seller が確定・交付すると表示されます。
           </p>
         ) : (
           <ul className="mt-4 divide-y divide-zinc-200 rounded-lg border border-zinc-200 bg-white dark:divide-zinc-800 dark:border-zinc-800 dark:bg-zinc-950">
@@ -152,7 +157,13 @@ export default async function BuyerDashboardPage() {
                   </div>
                   <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
                     期間 {inv.periodMonth}
-                    {inv.smallAmountExemptionApplied && " · 少額特例適用"}
+                    {inv.smallAmountExemptionApplied && (
+                      <span
+                        title="御社が課税売上高 1 億円以下の事業者の場合、 少額特例 (消費税法 30 条の 2、 期限 2029-09-30) で本書面の保存が不要になる可能性あり。 適用判断は御社にて"
+                      >
+                        {" "}· 1 万円未満該当あり (※)
+                      </span>
+                    )}
                   </div>
                   <div className="mt-3 flex flex-wrap items-center gap-3">
                     <span className="text-lg font-semibold">

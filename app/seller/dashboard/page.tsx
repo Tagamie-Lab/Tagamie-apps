@@ -4,6 +4,7 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 import { LogoutButton } from "../../buyer/dashboard/logout-button";
+import { ConfirmIssueButton } from "./confirm-issue-button";
 
 export const dynamic = "force-dynamic";
 
@@ -122,16 +123,11 @@ export default async function SellerDashboardPage() {
       </section>
 
       <section className="mt-8">
-        <h2 className="text-lg font-medium">発行済 適格請求書</h2>
+        <h2 className="text-lg font-medium">適格請求書 (draft / 確定済)</h2>
         <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-          月初 cron で自動発行された invoice の一覧。 旧 admin 画面 (
-          <Link
-            href="/admin/invoices"
-            className="underline hover:text-zinc-700 dark:hover:text-zinc-200"
-          >
-            /admin/invoices
-          </Link>
-          ) と並行運用中 (Phase 0-A)。
+          月初 cron で月次集計が走り、 draft invoice が自動作成されます。
+          内容を確認し「確定・交付」 で PDF 生成 + 買い手に公開されます
+          (発行者責任は seller 本人。 消費税法 57 条の 4)。
         </p>
 
         {invoices.length === 0 ? (
@@ -159,12 +155,24 @@ export default async function SellerDashboardPage() {
                   </div>
                   <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
                     期間 {inv.periodMonth}
-                    {inv.smallAmountExemptionApplied && " · 少額特例適用"}
+                    {inv.smallAmountExemptionApplied && (
+                      <span
+                        title="1 万円未満の取引が含まれる。 買い手側で少額特例 (消費税法 30 条の 2、 期限 2029-09-30) 適用可能性あり"
+                      >
+                        {" "}· 1 万円未満該当 (買い手側 少額特例参考)
+                      </span>
+                    )}
                   </div>
                   <div className="mt-3 flex flex-wrap items-center gap-3">
                     <span className="text-lg font-semibold">
                       {formatMinor(inv.totalMinor as bigint, inv.asset)}
                     </span>
+                    {inv.status === "draft" && (
+                      <ConfirmIssueButton
+                        invoiceId={inv.id}
+                        invoiceNumber={inv.invoiceNumber}
+                      />
+                    )}
                     {inv.pdfUrl && (
                       <Link
                         href={`/api/seller/invoices/${inv.id}/pdf`}

@@ -320,17 +320,32 @@ function MetaTable({ invoice }: { invoice: CanonicalInvoice }) {
       </View>
       <View style={styles.metaRow}>
         <Text style={styles.metaKey}>取引内容</Text>
-        <Text style={styles.metaVal}>API 利用料（x402 経由）</Text>
+        <Text style={styles.metaVal}>
+          {invoice.transactionDescription ?? "API 利用料（x402 経由）"}
+        </Text>
       </View>
       <View style={styles.metaRow}>
         <Text style={styles.metaKey}>件数</Text>
         <Text style={styles.metaVal}>
           {invoice.lineItems.length} 件
           {invoice.smallAmountExemptionApplied && (
-            <Text style={styles.exemptionBadge}> 少額特例 適用</Text>
+            <Text style={styles.exemptionBadge}>
+              {" "}
+              (うち 1 万円未満該当あり ※)
+            </Text>
           )}
         </Text>
       </View>
+      {invoice.smallAmountExemptionApplied && (
+        <View style={styles.metaRow}>
+          <Text style={styles.metaKey}> </Text>
+          <Text style={[styles.metaVal, { fontSize: 8, color: "#666" }]}>
+            ※ 1 万円未満の取引について、 買い手が課税売上高 1 億円以下の事業者
+            の場合は少額特例 (消費税法 30 条の 2、 期限 2029-09-30) で適格請求書の
+            保存が不要になる可能性があります。 適用判断は買い手側で行ってください。
+          </Text>
+        </View>
+      )}
     </View>
   );
 }

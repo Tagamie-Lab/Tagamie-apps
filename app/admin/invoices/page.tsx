@@ -110,7 +110,7 @@ export default async function AdminInvoicesPage({
         <div>
           <h1 className="text-2xl font-semibold">Tagamie · Admin / Invoices</h1>
           <p className="mt-1 text-sm text-zinc-500">
-            月次集計と少額特例判定の確認画面 (W2)
+            月次集計と 1 万円未満判定 (買い手側 少額特例参考) の確認画面 (W2)
           </p>
         </div>
         <Link href="/" className="text-sm text-zinc-500 hover:underline">
@@ -187,7 +187,7 @@ export default async function AdminInvoicesPage({
                 <th className="px-3 py-2">Buyer</th>
                 <th className="px-3 py-2">Total</th>
                 <th className="px-3 py-2">Tax breakdown</th>
-                <th className="px-3 py-2">少額特例</th>
+                <th className="px-3 py-2" title="1 万円未満該当あり / 買い手側で少額特例適用可能性あり (2029-09-30 まで)">1 万円未満</th>
                 <th className="px-3 py-2">Status</th>
                 <th className="px-3 py-2">PDF</th>
               </tr>
@@ -244,8 +244,11 @@ export default async function AdminInvoicesPage({
                     </td>
                     <td className="px-3 py-2">
                       {inv.smallAmountExemptionApplied ? (
-                        <span className="rounded bg-blue-100 px-1.5 py-0.5 text-xs text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
-                          適用
+                        <span
+                          className="rounded bg-blue-100 px-1.5 py-0.5 text-xs text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+                          title="1 万円未満の取引が含まれる。 買い手側で少額特例 (消費税法 30 条の 2、 期限 2029-09-30) 適用可能性あり"
+                        >
+                          該当
                         </span>
                       ) : (
                         <span className="text-xs text-zinc-400">—</span>

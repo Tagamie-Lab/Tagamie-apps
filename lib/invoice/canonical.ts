@@ -58,6 +58,13 @@ export interface CanonicalInvoice {
   buyer: CanonicalInvoiceBuyer;
   taxLines: CanonicalInvoiceTaxLine[];
   lineItems: CanonicalInvoiceLineItem[];
+  /**
+   * 法定 6 要件「取引内容」 に充てる人間可読の説明。
+   * Cross-Layer Context v1 (knowledge/cross-layer-context.md) 経由で
+   * settle_events.rawPayload.context.description から導出される。
+   * 文脈が無い場合は null、 PDF render は fallback ("API 利用料 (x402 経由)") を使う。
+   */
+  transactionDescription: string | null;
 }
 
 const EXPLORERS: Record<Chain, string> = {

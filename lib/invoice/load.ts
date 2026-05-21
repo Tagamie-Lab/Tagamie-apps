@@ -32,26 +32,35 @@ export async function loadCanonicalInvoice(
   }
 
   const eventIds = eventLinks.map((l) => l.eventId);
-  const events: CanonicalInvoiceLineItem[] =
+  const eventRows =
     eventIds.length === 0
       ? []
-      : (
-          await db
-            .select({
-              occurredAt: schema.settleEvents.occurredAt,
-              amountMinor: schema.settleEvents.amountMinor,
-              txHash: schema.settleEvents.txHash,
-              chain: schema.settleEvents.chain,
-            })
-            .from(schema.settleEvents)
-            .where(inArray(schema.settleEvents.id, eventIds))
-            .orderBy(asc(schema.settleEvents.occurredAt))
-        ).map((e) => ({
-          occurredAt: e.occurredAt,
-          amountMinor: e.amountMinor,
-          txHash: e.txHash,
-          chain: e.chain,
-        }));
+      : await db
+          .select({
+            occurredAt: schema.settleEvents.occurredAt,
+            amountMinor: schema.settleEvents.amountMinor,
+            txHash: schema.settleEvents.txHash,
+            chain: schema.settleEvents.chain,
+            rawPayload: schema.settleEvents.rawPayload,
+          })
+          .from(schema.settleEvents)
+          .where(inArray(schema.settleEvents.id, eventIds))
+          .orderBy(asc(schema.settleEvents.occurredAt));
+
+  const events: CanonicalInvoiceLineItem[] = eventRows.map((e) => ({
+    occurredAt: e.occurredAt,
+    amountMinor: e.amountMinor,
+    txHash: e.txHash,
+    chain: e.chain,
+  }));
+
+  // Cross-Layer Context (knowledge/cross-layer-context.md v1.0) からの
+  // 取引内容説明の解決。 settle_events.rawPayload に
+  // `context.description` (or `context.service.name`) があれば最初に見つかった
+  // ものを採用。 全イベントに無ければ null (PDF render が fallback を使う)。
+  const transactionDescription = extractTransactionDescription(
+    eventRows.map((e) => e.rawPayload),
+  );
 
   const [yStr, mStr] = inv.periodMonth.split("-");
   const bounds = jstMonthBounds(Number(yStr), Number(mStr));
@@ -88,5 +97,39 @@ export async function loadCanonicalInvoice(
       eventCount: l.eventCount,
     })),
     lineItems: events,
+    transactionDescription,
   };
+}
+
+/**
+ * Extract human-readable transaction description from Cross-Layer Context
+ * (knowledge/cross-layer-context.md v1.0) embedded in settle_events.rawPayload.
+ *
+ * Looks for `rawPayload.context.description` first, then falls back to
+ * `rawPayload.context.service.name`. Picks the first non-empty value across
+ * the provided payloads (ordered by occurredAt). Returns null if no context
+ * data is present — the PDF renderer applies its own fallback string.
+ */
+function extractTransactionDescription(
+  rawPayloads: ReadonlyArray<unknown>,
+): string | null {
+  for (const raw of rawPayloads) {
+    if (!raw || typeof raw !== "object") continue;
+    const ctx = (raw as { context?: unknown }).context;
+    if (!ctx || typeof ctx !== "object") continue;
+
+    const description = (ctx as { description?: unknown }).description;
+    if (typeof description === "string" && description.trim() !== "") {
+      return description;
+    }
+
+    const service = (ctx as { service?: unknown }).service;
+    if (service && typeof service === "object") {
+      const name = (service as { name?: unknown }).name;
+      if (typeof name === "string" && name.trim() !== "") {
+        return name;
+      }
+    }
+  }
+  return null;
 }
