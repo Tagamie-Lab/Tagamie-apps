@@ -18,9 +18,29 @@ import { registerInvoiceFonts } from "./fonts";
 
 // ---- formatters ---------------------------------------------------------
 
+/**
+ * Render an 18-decimal JPYC minor amount (wei) as yen, preserving sub-yen
+ * precision. JPYC has 18 decimals and micropayments are routinely fractional
+ * (¥5.5 fx call, ¥0.5 tax), so truncating to whole yen — `minor / 10n**18n` —
+ * loses real value and breaks the subtotal+tax=total identity in display.
+ * Trailing zeros are trimmed so whole-yen amounts still read as `¥11`, not `¥11.000…`.
+ */
+function formatJpycYen(minor: bigint): string {
+  const ONE = 10n ** 18n;
+  const neg = minor < 0n;
+  const abs = neg ? -minor : minor;
+  const whole = abs / ONE;
+  const frac = abs % ONE;
+  let s = whole.toLocaleString("ja-JP");
+  if (frac > 0n) {
+    s += "." + frac.toString().padStart(18, "0").replace(/0+$/, "");
+  }
+  return `${neg ? "-" : ""}¥${s}`;
+}
+
 function formatMoney(minor: bigint, asset: Asset): string {
   if (asset === "JPYC") {
-    return `¥${(minor / 10n ** 18n).toLocaleString()}`;
+    return formatJpycYen(minor);
   }
   // USDC: 6 decimals
   const whole = minor / 1_000_000n;
@@ -52,12 +72,13 @@ function formatTaxRate(bps: number): string {
 }
 
 /**
- * Format a single tax-rate row so that the displayed subtotal + tax === displayed total
- * even after currency-unit truncation (1 ¥ drift problem when floor-dividing wei to yen).
+ * Format a single tax-rate row's subtotal / tax / total for display.
  *
- * Strategy: keep displayed subtotal as floor(subtotal_minor), then derive displayed tax as
- * (displayed_total - displayed_subtotal) — same accounting convention as W2's wei-level
- * `tax = total - subtotal` rule (tax absorbs the rounding, buyer-favorable).
+ * Both JPYC and USDC are now rendered at full minor-unit precision, so the
+ * wei-level identity `subtotal_minor + tax_minor === total_minor` carries over
+ * to the displayed strings exactly — no whole-unit truncation, hence no 1 ¥
+ * drift adjustment is needed (the earlier floor-to-yen strategy silently
+ * dropped sub-yen JPYC amounts).
  */
 function formatTaxLineForDisplay(
   subtotalMinor: bigint,
@@ -65,14 +86,10 @@ function formatTaxLineForDisplay(
   asset: Asset,
 ): { subtotal: string; tax: string; total: string } {
   if (asset === "JPYC") {
-    const ONE = 10n ** 18n;
-    const subtotalYen = subtotalMinor / ONE;
-    const totalYen = (subtotalMinor + taxMinor) / ONE;
-    const taxYen = totalYen - subtotalYen;
     return {
-      subtotal: `¥${subtotalYen.toLocaleString()}`,
-      tax: `¥${taxYen.toLocaleString()}`,
-      total: `¥${totalYen.toLocaleString()}`,
+      subtotal: formatJpycYen(subtotalMinor),
+      tax: formatJpycYen(taxMinor),
+      total: formatJpycYen(subtotalMinor + taxMinor),
     };
   }
   // USDC: 6-decimal precision is shown in full, so wei-level identity holds in display too.
